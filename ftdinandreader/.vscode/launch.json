@@ -1,0 +1,45 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "(gdb) Launch",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/ftdinandreader",
+      //"args": ["-i"],
+      //"args": ["-r", "kernel-OOB.bin", "-p", "0x2000000", "0x22A22F0"],
+      //"args": ["-e", "-p", "0x80000", "0x100000"],
+      //"args": ["-r", "test", "-p", "0x0", "0x80000"],
+      //"args": ["-e", "-p", "0x2000000", "0x2200000"],
+      //"args": ["-e", "-p", "0x4500000", "0x04580000"],
+      //"args": ["-w", "CP1504SAL7M/CP1504SAL7M-bootloader-withOOB.bin", "-p", "0x0", "0x40000"],
+      //"args": ["-v", "bootloader/CP1504SAL7M-bootloader.bin", "-p", "0x0", "0x40000", "-t", "oob"],
+      "args": ["-w", "_bank_1-noOOB.bin.my/200000.squashfs", "-p", "0x4500000", "0x4700000", "-t", "oob"],
+      //"args": ["-r", "bootloader.bin", "-p", "0x0", "0x3FF00"],
+      //"args": ["-r", "kernel_test_read", "-p", "0x0", "0x60000", "-t", "bb"],
+      //"args": ["-w", "bootloader/bootloader-withOOB.bin", "-p", "0x0", "0x40000"],
+      
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ],
+      "sourceFileMap": {
+        "ftdinandreader": "~/nandreader/libftdi1-1.5/src",
+      }      
+      //"sourceMapPathOverrides": {
+      //  "/source/*": "${workspaceFolder}/*"
+      //}
+    }
+  ]
+}

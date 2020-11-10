@@ -1,0 +1,33 @@
+{
+  "tasks": [
+    {
+      "type": "cppbuild",
+      "label": "C/C++: gcc build active file",
+      "command": "test",
+      //"command": "/usr/bin/gcc",
+      "args": [
+        "-g2",
+        "-Wall",
+        "-I/usr/include/libftdi1",
+        "-L/usr/lib",
+        "-lftdi1",
+        "-lusb-1.0",
+        "${file}",
+        "-o",
+        "${fileDirname}/${fileBasenameNoExtension}"
+      ],
+      "options": {
+        "cwd": "/usr/bin"
+      },
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "detail": "Generated task by Debugger"
+    }
+  ],
+  "version": "2.0.0"
+}

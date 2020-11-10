@@ -1,0 +1,20 @@
+{
+	"folders": [
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
+    "git.ignoreLimitWarning": true,
+    "files.associations": {
+      "*.tcc": "c",
+      "array": "c",
+      "string": "c",
+      "hash_map": "cpp",
+      "bitset": "cpp",
+      "initializer_list": "cpp",
+      "utility": "cpp",
+      "valarray": "cpp"
+    }
+  }
+}
