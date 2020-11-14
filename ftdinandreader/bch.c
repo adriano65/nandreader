@@ -138,9 +138,7 @@ static void encode_bch_unaligned(struct bch_control *bch,
 /*
  * convert ecc bytes to aligned, zero-padded 32-bit ecc words
  */
-static void load_ecc8(struct bch_control *bch, uint32_t *dst,
-		      const uint8_t *src)
-{
+static void load_ecc8(struct bch_control *bch, uint32_t *dst, const uint8_t *src) {
 	uint8_t pad[4] = {0, 0, 0, 0};
 	unsigned int i, nwords = BCH_ECC_WORDS(bch)-1;
 
@@ -154,9 +152,7 @@ static void load_ecc8(struct bch_control *bch, uint32_t *dst,
 /*
  * convert 32-bit ecc words to ecc bytes
  */
-static void store_ecc8(struct bch_control *bch, uint8_t *dst,
-		       const uint32_t *src)
-{
+static void store_ecc8(struct bch_control *bch, uint8_t *dst, const uint32_t *src) {
 	uint8_t pad[4];
 	unsigned int i, nwords = BCH_ECC_WORDS(bch)-1;
 
@@ -187,9 +183,7 @@ static void store_ecc8(struct bch_control *bch, uint8_t *dst,
  * The exact number of computed ecc parity bits is given by member @ecc_bits of
  * @bch; it may be less than m*t for large values of t.
  */
-void encode_bch(struct bch_control *bch, const uint8_t *data,
-		unsigned int len, uint8_t *ecc)
-{
+void encode_bch(struct bch_control *bch, const uint8_t *data,	unsigned int len, uint8_t *ecc) {
 	const unsigned int l = BCH_ECC_WORDS(bch)-1;
 	unsigned int i, mlen;
 	unsigned long m;
@@ -984,10 +978,7 @@ static int chien_search(struct bch_control *bch, unsigned int len,
  * Note that this function does not perform any data correction by itself, it
  * merely indicates error locations.
  */
-int decode_bch(struct bch_control *bch, const uint8_t *data, unsigned int len,
-	       const uint8_t *recv_ecc, const uint8_t *calc_ecc,
-	       const unsigned int *syn, unsigned int *errloc)
-{
+int decode_bch(struct bch_control *bch, const uint8_t *data, unsigned int len, const uint8_t *recv_ecc, const uint8_t *calc_ecc, const unsigned int *syn, unsigned int *errloc){
 	const unsigned int ecc_words = BCH_ECC_WORDS(bch);
 	unsigned int nbits;
 	int i, err, nroots;
@@ -1048,8 +1039,7 @@ int decode_bch(struct bch_control *bch, const uint8_t *data, unsigned int len,
 /*
  * generate Galois field lookup tables
  */
-static int build_gf_tables(struct bch_control *bch, unsigned int poly)
-{
+static int build_gf_tables(struct bch_control *bch, unsigned int poly){
 	unsigned int i, x = 1;
 	const unsigned int k = 1 << deg(poly);
 
@@ -1076,8 +1066,7 @@ static int build_gf_tables(struct bch_control *bch, unsigned int poly)
 /*
  * compute generator polynomial remainder tables for fast encoding
  */
-static void build_mod8_tables(struct bch_control *bch, const uint32_t *g)
-{
+static void build_mod8_tables(struct bch_control *bch, const uint32_t *g){
 	int i, j, b, d;
 	uint32_t data, hi, lo, *tab;
 	const int l = BCH_ECC_WORDS(bch);
@@ -1110,8 +1099,7 @@ static void build_mod8_tables(struct bch_control *bch, const uint32_t *g)
 /*
  * build a base for factoring degree 2 polynomials
  */
-static int build_deg2_base(struct bch_control *bch)
-{
+static int build_deg2_base(struct bch_control *bch){
 	const int m = GF_M(bch);
 	int i, j, r;
 	unsigned int sum, x, y, remaining, ak = 0, xi[m];
@@ -1246,8 +1234,7 @@ finish:
  * BCH control structure, ecc length in bytes is given by member @ecc_bytes of
  * the structure.
  */
-struct bch_control *init_bch(int m, int t, unsigned int prim_poly)
-{
+struct bch_control *init_bch(int m, int t, unsigned int prim_poly) {
 	int err = 0;
 	unsigned int i, words;
 	uint32_t *genpoly;
@@ -1339,8 +1326,7 @@ fail:
  *  free_bch - free the BCH control structure
  *  @bch:    BCH control structure to release
  */
-void free_bch(struct bch_control *bch)
-{
+void free_bch(struct bch_control *bch) {
 	unsigned int i;
 
 	if (bch) {

@@ -12,7 +12,6 @@ class NandChip {
 public:
   enum Action {
     actionNone=0,
-    getID,
     actionRead,
     actionWrite,
     actionVerify,
@@ -21,11 +20,11 @@ public:
 
 	enum AccessType {
 		None,
-    Page,
-    PageplusOOB,
-		recalcOOB,
-		skipOOB,
-		addOOB,
+    NandPageSz_eq_FilePageSz,
+    NandPagewOOBSz_eq_FilePagewOOBSz,
+		NandPageSz_to_FilePagewRecalcOOBSz,   // only read
+    FilePage_to_NandPagewOOBAddedSz,      // only write
+    NandPagewOOBSz_to_FileOOBOnly,        // only read
 		useBitBang,
 	  };
   NandChip(int vid, int pid, bool doSlow, AccessType _accessType, Action action, unsigned long _start_address, unsigned long _end_address);
@@ -35,6 +34,7 @@ public:
   unsigned long end_address;
   unsigned int nandPageSize;
   unsigned int filePageSize;
+  unsigned int fileOffset;
   unsigned int erasepageSize;
   unsigned int start_erasepageno;
   unsigned int end_erasepageno;
@@ -47,7 +47,7 @@ public:
 		BadEraseEnd=3,
 		BadEnd=4,
 	};
-	NandChip::AddressCheck checkAddresses(Action action);
+  void setSizes(AccessType);
   int open();
 	int readPage(unsigned long );
 	int writePage(unsigned long );

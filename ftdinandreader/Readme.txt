@@ -1,4 +1,4 @@
-router model -> TG799vn
+router model -> TG799vn VDNT-S
 SN -> CP1316RAUGG
 AK 69FMCJW7
 Main SoC -> bcm63288DVKFEBG
@@ -295,7 +295,7 @@ Creating 5 MTD partitions on "technicolor-nand-tl":
 0x000000020000-0x000000040000 : "eripv2"                                                             
 0x000000040000-0x000000080000 : "rawstorage"
 
-0x000006a00000-0x000008000000 : "undef_bank..."
+0x000006a00000-0x000008000000 : "kernels bank..." 
 0x000002000000-0x000002200000 kernel 1 ?
 -------------------------------------------------------------> no ! userfs ends @ 0x4d00000 .... so overwrites bank_2: limit to 0x4500000!!
 ./ftdinandreader -r rootfs -p 0x2200000 0x4500000 -t both
@@ -379,7 +379,7 @@ which ECC algorithm is used by the NAND sub-system. By default, both u-boot and 
 ./ftdinandreader -r bank_2 -p 0x44F7000 0x04539000
 
 
------------------------------------------------------------------------------------ extracting kernel
+-----------------------------------------------------------------------------------
 ./ftdinandreader -e -p 0x80000 0x2000000
 ./ftdinandreader -w userfs-noOOB.bin -p 0x80000 0x2000000 -t oob
 
@@ -390,8 +390,22 @@ load: wrong nand ecc error goes away, but no kernel boot
 ./ftdinandreader -e -p 0x40000 0x8000000
 
 extract eripv2 
-dd if=bootloader-withOOB.bin of=eripv2-withOOB.bin bs=1 count=132000 skip=132000
+dd if=bootloader-withOOB.bin of=eripv2-withOOB.bin bs=1 count=135168 skip=135168
 ./ftdinandreader -w eripv2-withOOB.bin -p 0x20000 0x40000
+
+-- FIX eripv2 --> NO
+./ftdinandreader -e -p 0x20000 0x80000
+./ftdinandreader -w bootloader/eripv2-withOOB.bin -p 0x20000 0x40000
+./ftdinandreader -w bootloader/rawstorage-withOOB.bin -p 0x40000 0x80000
+
+-- FIX eripv2 --> NO
+./ftdinandreader -e -p 0x0 0x80000
+./ftdinandreader -w bootloader/bootloader-withOOB.bin -p 0x00 0x80000
+
+-- FIX eripv2 --> NO
+./ftdinandreader -e -p 0x40000 0x6A00000
+
+
 
 ------------------------------------------------------------------------------------ this seems to correct better reboot loop
 ./ftdinandreader -w bootloader/rawstorage-withOOB.bin -p 0x40000 0x80000 -t skip
@@ -403,10 +417,12 @@ YES!! firmware bootp loaded and linux comes up
 ---- NO
 
 
------------------------------------------------------------------------------------- OK correct reboot loop
-./ftdinandreader -e -p 0x40000 0x6A00000
-./ftdinandreader -w bootloader/rawstorage-withOOB.bin -p 0x40000 0x80000 -t skip
-Extract kernel
+------------------------------------------------------------------------------------ OK correct reboot loop and RIP2
+./ftdinandreader -e -p 0x00 0x8000000
+./ftdinandreader -w bootloader/bootloader-withOOB.bin -p 0x00 0x80000
+
+
+--------------------------------------------------------------------------------------- Extract kernel
 ./ftdinandreader -r kernel-0x2060000.bin -p 0x2060000 0x2300000 -t main
 
 
@@ -418,3 +434,82 @@ restore old kernel
 
 WHERE IS KERNEL ???
 ./ftdinandreader -r test -p 0x100000 0xF00000 -t main
+
+./ftdinandreader -r test2 -p 0x22F000 0x230000 -t main
+
+
+------------------------------------------------------------ change Rescue user uid/gid to 0
+./ftdinandreader -r test2 -p 0x220000 0x240000 -t main
+edit jffs2 block
+./ftdinandreader -e -p 0x220000 0x240000
+./ftdinandreader -w test2 -p 0x220000 0x240000 -t oob
+at boot brcmnand reconize bad blocks at 220000 and mark them as bad 
+
+
+------------------------------------------------------------ try load 4.0 FW
+no remove rawstorage partition
+./ftdinandreader -e -p 0x80000 0x6A00000
+
+
+WHERE IS KERNEL ???
+./ftdinandreader -r test2 -p 0x6a00000 0x8000000 -t main
+
+---------------------------------------------------------------------- Test 1 - falso allarme
+6a00000+13E0000 = 7DE0000 --> ?
+./ftdinandreader -r test -p 0x7DE0000 0x7E80000 -t main  --> nothing
+
+
+6a00000+1480000 = 7E80000 --> Kernel ! bank 2 ?
+./ftdinandreader -r test -p 0x7E80000 0x7F00000 -t main  --> nothing
+now check where it finish
+0x8000000-0x7E00000 --> MAX 0x180000 ! 
+
+./ftdinandreader -e -p 0x7E80000 0x8000000
+./ftdinandreader -w kernel/kernel_my.bin -p 0x7E80000 0x8000000 -t oob
+./ftdinandreader -w kernel/kernel_my.bin -p 0x7E80000 0x8000000 -t main
+
+
+-------------------------------------------- rootfs, squash fs
+SQUASHFS error: Can't find a SQUASHFS superblock on mtdblock1
+./ftdinandreader -e -p 0x2200000 0x4D00000
+./ftdinandreader -w _bank_1-noOOB.bin.my/200000.my2 -p 0x2200000 0x2300000 -t oob -----> NO
+
+./ftdinandreader -e -p 0x2000000 0x2100000
+./ftdinandreader -w _bank_1-noOOB.bin.my/200000.my -p 0x2000000 0x2100000 -t oob ---------> NO + kernel NOT LOADED
+
+-----------------------  restore 0x2000000 0x2200040  
+./ftdinandreader -e -p 0x2000000 0x2200040
+./ftdinandreader -w CP1504SAL7M/CP1504SAL7M-bank1-withOOB.bin -p 0x2000000 0x2200040  --> NO !
+
+---Reload FW
+./ftdinandreader -e -p 0x80000 0x8000000
+
+---------------------------------------------------------------------- kernel Test2 is here now !?
+./ftdinandreader -r test -p 0x2020000 0x2100000 -t main
+./ftdinandreader -e -p 0x2020000 0x2100000
+./ftdinandreader -w kernel/kernel_my.bin -p 0x2020000 0x2100000 -t add
+
+
+--------------------------------------------- some mips elf binaries discovered
+./ftdinandreader -r test -p 0x7f80000 0x8000000 -t main
+
+./ftdinandreader -r test -p 0x2220000 0x2300000 -t main --> squash
+
+--------------------------------------------- ecc stuff.. OK!!
+./createnfimg -j 0 -b 1 -i test
+
+./createnfimg -j 0 -b 1 -i kernel_my.bin
+
+./ftdinandreader -e -p 0x2000000 0x2200000
+./ftdinandreader -w kernel/kernel_my.out -p 0x2000000 0x2200000
+---> NO: reload old FW
+./ftdinandreader -w kernel/kernel-2000000.2200000-wOOB.bin -p 0x2000000 0x2200000
+
+
+--------------------------------------------- rootfs
+./ftdinandreader -r test -p 0x2200000 0x2300000
+
+./createnfimg -j 0 -b 1 -i rootfs.my
+
+./ftdinandreader -e -p 0x2200000 0x4500000
+./ftdinandreader -w rootfs.out -p 0x2200000 0x4500000

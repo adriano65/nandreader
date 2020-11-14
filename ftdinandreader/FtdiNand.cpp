@@ -110,7 +110,7 @@ int FtdiNand::nandRead(int cl, int al, unsigned char *buf, int bytes2read) {
     //if (ftdi_usb_purge_buffers(&m_ftdi)<0) return error("ftdi_usb_purge_buffers");
 
     if (bytesread<0) return error("reading data");
-    if (bytesread<bytes2read) { printf("short read: bytes2read 0x%04X, bytesread 0x%04X\n", bytes2read, bytesread); continue; }
+    if (bytesread<bytes2read) { printf("short read: bytes2read 0x%04X, bytesread 0x%04X, retrying...\n", bytes2read, bytesread); continue; }
     break;
     }
 	delete[] cmds;

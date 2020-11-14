@@ -29,6 +29,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "NandCmds.h"
 #include "bch.h"
 
+#define NANDREADER_DBG_MIN
+#ifdef NANDREADER_DBG_MIN
+  #define DBG_MIN(fmt...) do {printf("%s: ", __FUNCTION__); printf(fmt); printf("\n"); } while(0)
+#else
+  #define DBG_MIN(fmt...) do { } while(0)
+#endif
+//#define NANDREADER_DBG_MAX
+#ifdef NANDREADER_DBG_MAX
+  #define DBG_MAX(fmt...) do {printf("%s: ", __FUNCTION__); printf(fmt); printf("\n"); } while(0)
+#else
+  #define DBG_MAX(fmt...) do { } while(0)
+#endif
+
 NandChip::NandChip(int vid, int pid, bool doSlow, AccessType _accessType, Action action, unsigned long _start_address, unsigned long _end_address) {
 	unsigned char id[5];
 
@@ -54,67 +67,68 @@ NandChip::NandChip(int vid, int pid, bool doSlow, AccessType _accessType, Action
 	pFtdiNand->sendCmd(NAND_CMD_GETFEATURES);
 	pFtdiNand->sendAddr(NAND_ADDR_TIMINGS, 1);
 	pFtdiNand->readData(id, 5);
-  printf("NAND_CMD_GETFEATURES->NAND_ADDR_TIMINGS 0x%02X 0x%02X 0x%02X 0x%02X\n", id[0], id[1], id[2], id[3]);
+  DBG_MIN("NAND_CMD_GETFEATURES->NAND_ADDR_TIMINGS 0x%02X 0x%02X 0x%02X 0x%02X\n", id[0], id[1], id[2], id[3]);
 	pFtdiNand->sendCmd(NAND_CMD_GETFEATURES);
 	pFtdiNand->sendAddr(NAND_ADDR_ARRAYOP, 1);
 	pFtdiNand->readData(id, 5);
-  printf("NAND_CMD_GETFEATURES->NAND_ADDR_ARRAYOP 0x%02X 0x%02X 0x%02X 0x%02X\n", id[0], id[1], id[2], id[3]);
+  DBG_MIN("NAND_CMD_GETFEATURES->NAND_ADDR_ARRAYOP 0x%02X 0x%02X 0x%02X 0x%02X\n", id[0], id[1], id[2], id[3]);
 
-
-  switch (accessType) {
-  case Page:
-    nandPageSize=filePageSize=pNandID->getPageSize();
-    pageBuf=new unsigned char[filePageSize];
-    erasepageSize=pNandID->getEraseSz();
-    break;
-
-  case PageplusOOB:
-    nandPageSize=pNandID->getPageSize();
-    filePageSize=nandPageSize+pNandID->getOobSize();
-    pageBuf=new unsigned char[filePageSize];
-    erasepageSize=pNandID->getEraseSz();
-    break;
-  
-  case recalcOOB:
-  case skipOOB:
-    switch (action) {
-      // loads pages from file (with OOB), add OOB to pagebuf and compare them to nand loaded with OOB data
-      case actionVerify:
-        nandPageSize=pNandID->getPageSize();
-        filePageSize=nandPageSize+pNandID->getOobSize();
-        pageBuf=new unsigned char[filePageSize];
-        erasepageSize=pNandID->getEraseSz();
-        break;
-      // loads pages from file (with OOB), recalc OOB and write to nand adding new OOB data
-      case actionWrite:
-        nandPageSize=pNandID->getPageSize();
-        filePageSize=nandPageSize+pNandID->getOobSize();
-        pageBuf=new unsigned char[filePageSize];
-        erasepageSize=pNandID->getEraseSz();
-        break;
-    }
-    break;
-
-  case addOOB:
-    switch (action) {
-      // loads pages from file (withot OOB), calc OOB and write to nand adding OOB data
-      case actionWrite:
-        filePageSize=pNandID->getPageSize();
-        nandPageSize=nandPageSize+pNandID->getOobSize();
-        pageBuf=new unsigned char[filePageSize];
-        erasepageSize=pNandID->getEraseSz();
-        break;
-      }
-    break;    
-
-  default:
-    exit(0);
-    break;
-    }
-
+  fileOffset=0;
   erasepageSize=pNandID->getEraseSz();
   start_address=_start_address;
-  end_address=_end_address;
+  if (_end_address == 0) { 
+    end_address = (pNandID->getSizeMB()*1024L*1024L); 
+    end_pageno=(pNandID->getSizeMB()*1024L*1024L)/pNandID->getPageSize();
+    }
+  else {
+    end_address=_end_address;
+    }
+
+  switch (action) {
+    // loads pages from file (withot OOB), calc OOB and write to nand adding OOB data
+    case actionRead:
+      setSizes(accessType);
+      if (start_address%nandPageSize == 0) { start_pageno=start_address/nandPageSize; }
+      else { 
+        DBG_MIN("Misaligned start_address for R/W: use 0x%08X", (unsigned long)(start_address/nandPageSize)*nandPageSize); 
+        exit(1);
+        }
+
+      if (end_address%nandPageSize == 0) { end_pageno=end_address/nandPageSize; }
+      else { 
+        DBG_MIN("Misaligned end_address for R/W: use 0x%08X", (unsigned long)(end_address/nandPageSize)*nandPageSize);
+        exit(1);
+        }
+      break;
+    case actionWrite:
+      setSizes(accessType);
+      if (start_address%nandPageSize == 0) { start_pageno=start_address/nandPageSize; }
+      else { 
+        DBG_MIN("Misaligned start_address for R/W: use 0x%08X", (unsigned long)(start_address/nandPageSize)*nandPageSize); 
+        exit(1);
+        }
+
+      if (end_address%nandPageSize == 0) { end_pageno=end_address/nandPageSize; }
+      else { 
+        DBG_MIN("Misaligned end_address for R/W: use 0x%08X", (unsigned long)(end_address/nandPageSize)*nandPageSize);
+        exit(1);
+        }
+      break;
+
+    case actionErase:
+      if (start_address%erasepageSize == 0) { start_erasepageno=start_address/erasepageSize; }
+      else {
+        DBG_MIN("Misaligned start_address for erasing: use 0x%08X", (unsigned long)(start_address/erasepageSize)*erasepageSize);
+        exit(1);
+        }
+      if (end_address%erasepageSize == 0) { end_erasepageno=end_address/erasepageSize; }
+      else {
+        DBG_MIN("Misaligned end_address for erasing: use 0x%08X", (unsigned long)(end_address/erasepageSize)*erasepageSize);
+        exit(1);
+        }
+      break;
+    }
+
   }
 
 NandChip::~NandChip() {
@@ -123,38 +137,44 @@ NandChip::~NandChip() {
 	//delete pNandID;
 }
 
-NandChip::AddressCheck NandChip::checkAddresses(Action action) {
-  if (end_address == 0) { 
-    end_address = (pNandID->getSizeMB()*1024L*1024L); 
-    end_pageno=(pNandID->getSizeMB()*1024L*1024L)/pNandID->getPageSize();
-    }
+void NandChip::setSizes(AccessType accessType) {
+  erasepageSize=pNandID->getEraseSz();
+  switch (accessType) {
+    case NandPageSz_eq_FilePageSz:
+      nandPageSize=filePageSize=pNandID->getPageSize();
+      pageBuf=new unsigned char[filePageSize];
+      break;
 
-  if (action==actionErase) {
-    if (start_address%erasepageSize == 0) { start_erasepageno=start_address/erasepageSize; }
-    else {
-      printf("Misaligned start_address for erasing: use 0x%08X\n", (unsigned long)(start_address/erasepageSize)*erasepageSize);
-      return BadEraseStart;
-      }
-    if (end_address%erasepageSize == 0) { end_erasepageno=end_address/erasepageSize; }
-    else {
-      printf("Misaligned end_address for erasing: use 0x%08X\n", (unsigned long)(end_address/erasepageSize)*erasepageSize);
-      return BadEraseEnd;
-      }
-    }
-  else {
-    if (start_address%nandPageSize == 0) { start_pageno=start_address/nandPageSize; }
-    else { 
-      printf("Misaligned start_address for R/W: use 0x%08X\n", (unsigned long)(start_address/nandPageSize)*nandPageSize); 
-      return BadStart;
-      }
+    case NandPagewOOBSz_eq_FilePagewOOBSz:
+      nandPageSize=pNandID->getPageSize();
+      filePageSize=nandPageSize+pNandID->getOobSize();
+      pageBuf=new unsigned char[filePageSize];
+      break;
 
-    if (end_address%nandPageSize == 0) { end_pageno=end_address/nandPageSize; }
-    else { 
-      printf("Misaligned end_address for R/W: use 0x%08X\n", (unsigned long)(end_address/nandPageSize)*nandPageSize);
-      return BadEnd;
-      }
+    case NandPagewOOBSz_to_FileOOBOnly:
+      nandPageSize=pNandID->getPageSize();
+      filePageSize=nandPageSize+pNandID->getOobSize();
+      pageBuf=new unsigned char[filePageSize];
+      fileOffset=nandPageSize;
+      break;
+
+    case NandPageSz_to_FilePagewRecalcOOBSz:    //Only Read
+      nandPageSize=pNandID->getPageSize();
+      filePageSize=nandPageSize+pNandID->getOobSize();
+      pageBuf=new unsigned char[filePageSize];
+      break;
+
+    case FilePage_to_NandPagewOOBAddedSz:       //Only Write
+      nandPageSize=pNandID->getPageSize();
+      filePageSize=nandPageSize+pNandID->getOobSize();
+      pageBuf=new unsigned char[filePageSize];
+      break;
+
+    default:
+      DBG_MIN("Wrong case");
+      exit(0);
+      break;
     }
-  return OK;
 }
 
 int NandChip::readPage(unsigned long address) {
@@ -162,31 +182,35 @@ int NandChip::readPage(unsigned long address) {
   unsigned int row;
   row=address/nandPageSize;
   switch (accessType) {
-    // each page of nand is loaded and written to file
-    case Page:
+    // each page of nand is loaded and written to file without OOB
+    case NandPageSz_eq_FilePageSz:
       nRes=pNandData->readPage(row, pageBuf, nandPageSize);;
       break;
 
     // each page+oob size of nand is loaded and page+oob are written to file
-    case PageplusOOB:
+    case NandPagewOOBSz_eq_FilePagewOOBSz:
+    case NandPagewOOBSz_to_FileOOBOnly:
       nRes=pNandData->readPage(row, pageBuf, filePageSize);
       break;
     
-    // each page+oob size of nand is loaded, but only page bytes are written to file
-    case skipOOB:
-      nRes=pNandData->readPage(row, pageBuf, filePageSize);
-      break;
-    
-    // each page+oob size of nand is loaded, oob data is substituted with recalculated oob and page+oob page bytes are written to file
-    case recalcOOB:
+    // each page size of nand is loaded, oob data is substituted with recalculated oob and page+oob page bytes are written to file
+    case NandPageSz_to_FilePagewRecalcOOBSz:
+      memset(pageBuf, 0xFF, filePageSize); // prepare buff for bch
       pNandData->readPage(row, pageBuf, nandPageSize);
-      //brcm_nand(0, pageBuf);                //default polynomial
-      brcm_nand(1, pageBuf);
+      brcm_nand(0, pageBuf);                //default polynomial
+      //brcm_nand(8, pageBuf);                // NO
+      //brcm_nand(0x25, pageBuf);             // NO
       nRes=filePageSize;
       break;
-    
+
+    // we are called from Write to check :-)
+    case FilePage_to_NandPagewOOBAddedSz:
+      nRes=pNandData->readPage(row, pageBuf, filePageSize);
+      break;
+
+
     default:
-      printf("unexpected case");
+      DBG_MIN("unexpected case");
       exit(0);
       break;
     }
@@ -196,45 +220,28 @@ int NandChip::readPage(unsigned long address) {
 int NandChip::writePage(unsigned long address) {
   int nRes;
   unsigned int row;
+  row=address/nandPageSize;
   switch (accessType) {
     // each page of file is loaded of nand page size and written to nand
-    case Page:
-      row=address/nandPageSize;
+    case NandPageSz_eq_FilePageSz:
       nRes=pNandData->writePage(row, pageBuf, nandPageSize);;
       break;
     
     // each page of file is loaded of nand page+oob size and written to nand
-    case PageplusOOB:
-      row=address/nandPageSize;
+    case NandPagewOOBSz_eq_FilePagewOOBSz:
       nRes=pNandData->writePage(row, pageBuf, filePageSize);
       break;
 
-    // each page of file is loaded of page+oob size, but only page bytes are written
-    case skipOOB:
-      row=address/nandPageSize;
-      pNandData->writePage(row, pageBuf, nandPageSize);
-      nRes=filePageSize;
-      break;
-    
-    // each page of file is loaded of page+oob size, oob data is substituted with recalculated oob
-    case recalcOOB:
-      row=address/nandPageSize;
-      //brcm_nand(0, pageBuf);                //default polynomial
-      brcm_nand(1, pageBuf);                //default polynomial -- seem same as bcm
+    // each page of file is loaded of page size, recalculated oob data is added and written to nand
+    case FilePage_to_NandPagewOOBAddedSz:
+      //brcm_nand(0, pageBuf);              //default polynomial --> NO
+      brcm_nand(0x25, pageBuf);
       pNandData->writePage(row, pageBuf, filePageSize);
       nRes=filePageSize;
       break;
 
-    // each page of file is loaded of nandpage size, oob data is added and written to nand
-    case addOOB:
-      row=address/filePageSize;
-      brcm_nand(1, pageBuf);                //default polynomial -- seem same as bcm
-      pNandData->writePage(row, pageBuf, nandPageSize);
-      nRes=filePageSize;
-      break;
-
     default:
-      printf("unexpected case");
+      DBG_MIN("unexpected case");
       exit(0);
       break;
     }
