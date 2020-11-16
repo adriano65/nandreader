@@ -36,6 +36,9 @@ Decrypted RBI firmwares are the same as bank_1 or bank_2 dumps except for their 
 A correctly decrypted RBI starts with a sequence of four 0xFF. 
 You can edit these bytes to 0x00 and use the resulting file as a bank dump to be restored.
 
+-----------------------------------------------------------------------------------------------------------------maybe this get access to shell
+cat | sh
+
 ------------- bootpd --------------------------------------------------
 dhcpd -f -d eth6
 
@@ -246,8 +249,8 @@ bank2 start 35328 total 18944  -> ends at 54272
 ./ftdinandreader -r bootloader.bin -p 0x00 0x81000 -t main
  
 ----------------------------------------------------------------------------------- copy bank1 to bank 2
-./ftdinandreader -r bank_1 -p 0x2000000 0x4500000 -t both
-./ftdinandreader -w bank_1 -p 0x04500000 0x06a00000 -t both
+./ftdinandreader -r bank_1 -p 0x2000000 0x4500000
+./ftdinandreader -w bank_1 -p 0x04500000 0x06a00000
 
 AGVTF_1.0.0_008.rbi -> Linux version 2.6.30 (gcc version 3.4.6) #1 Sat Apr 28 17:41:44 CST 2012				--> no zlib in kernel!
 AGVTF_2.0.0_010_closed.rbi -> Linux version 2.6.30 (gcc version 3.4.6) #1 Fri Jul 13 14:18:15 CST 2012		--> no zlib in kernel!
@@ -295,10 +298,12 @@ Creating 5 MTD partitions on "technicolor-nand-tl":
 0x000000020000-0x000000040000 : "eripv2"                                                             
 0x000000040000-0x000000080000 : "rawstorage"
 
-0x000006a00000-0x000008000000 : "kernels bank..." 
-0x000002000000-0x000002200000 kernel 1 ?
+0x000002000000-0x000002200000 : "kernel 1"
+0x000006a00000-0x000008000000 : "some proprietary ELF..." 
+0x000004500000-0x000004700000 : "kernel 2 maybe"                                                             
+
 -------------------------------------------------------------> no ! userfs ends @ 0x4d00000 .... so overwrites bank_2: limit to 0x4500000!!
-./ftdinandreader -r rootfs -p 0x2200000 0x4500000 -t both
+./ftdinandreader -r rootfs -p 0x2200000 0x4500000
 
 dd if=rootfs.jffs2 of=rootfs.squash bs=1 skip=1115136 count=12711002
 
@@ -506,10 +511,183 @@ SQUASHFS error: Can't find a SQUASHFS superblock on mtdblock1
 ./ftdinandreader -w kernel/kernel-2000000.2200000-wOOB.bin -p 0x2000000 0x2200000
 
 
---------------------------------------------- rootfs
+--------------------------------------------- rootfs on bank_1
 ./ftdinandreader -r test -p 0x2200000 0x2300000
 
 ./createnfimg -j 0 -b 1 -i rootfs.my
 
 ./ftdinandreader -e -p 0x2200000 0x4500000
 ./ftdinandreader -w rootfs.out -p 0x2200000 0x4500000
+rootfs lengh == 40584192 == 0x26B4400
+--> NO kernel stops: but rootfs.out (squash) not fully loaded: it must go to 0x48B4400... retry
+
+./ftdinandreader -e -p 0x2200000 0x4900000
+./ftdinandreader -w rootfs.out -p 0x2200000 0x4900000
+
+
+--------------------------------------------- try loading kernel on second bank - OK 
+./ftdinandreader -e -p 0x4500000 0x4700000
+./ftdinandreader -w kernel/kernel-2000000.2200000-wOOB.bin -p 0x4500000 0x4700000
+
+
+--------------------------------------------- rootfs on bank_2 -- NO
+./ftdinandreader -e -p 0x4700000 0x6E00000
+./ftdinandreader -w rootfs.out -p 0x4700000 0x6E00000
+
+
+--------------------------------------------- extract rootfs from bank_1
+./ftdinandreader -r rootfs.squash -p 0x2200000 0x4500000 -t main
+binwalk -e rootfs.squash
+
+DECIMAL       HEXADECIMAL     DESCRIPTION
+--------------------------------------------------------------------------------
+0             0x0             Squashfs filesystem, little endian, non-standard signature, version 4.0, compression:gzip, size: 12723158 bytes, 1354 inodes, blocksize: 65536 bytes, created: 2016-05-26 16:02:13
+----> "non-standard signature" means shqs 
+
+
+cd rootfs/_rootfs.squash.extracted
+./mksquashfs squashfs-root-minimal rootfs.squash -noappend
+
+../../createnfimg -j 0 -b 1 -i rootfs.squash
+
+
+./ftdinandreader -e -p 0x4700000 0x4C40000
+./ftdinandreader -w rootfs/_rootfs.squash.extracted/rootfs.out -p 0x4700000 0x4C40000
+
+
+--------------------------------------------- try to make jffs2 for rootfs instead of squash :-)   -- NO
+mkfs.jffs2 -e 128KiB -b -r squashfs-root-minimal -o rootfs.jffs2
+../../createnfimg -j 0 -b 1 -i rootfs.jffs2
+./ftdinandreader -e -p 0x4700000 0x4F00000
+./ftdinandreader -w rootfs/_rootfs.squash.extracted/rootfs.out -p 0x4700000 0x4F00000
+
+--------------------------------------------- back to kernel hacking :-) NO. DOuble pointer release...
+./ftdinandreader -r kernel/kernel-2000000.2200000.bin -p 0x2000000 0x2200000 -t main
+lenght --> D4D00
+
+cd kernel/_kernel-2000000.2200000.bin.extracted
+binwalk
+edit 1A 
+lzma -z 1A.init.bin.sh
+
+cp ../kernel_header 1A.init.bin.sh.lzma-wHeader
+cat 1A.init.bin.sh.lzma >> 1A.init.bin.sh.lzma-wHeader
+
+../../createnfimg -j 0 -b 1 -i 1A.init.bin.sh.lzma-wHeader
+we got 1A.out
+
+cd ../..
+
+./ftdinandreader -e -p 0x4500000 0x4700000
+./ftdinandreader -w kernel/_kernel-2000000.2200000.bin.extracted/1A.out -p 0x4500000 0x4700000
+
+--------------------------------------------- back to reload kernel on second bank -- OK
+./ftdinandreader -e -p 0x4500000 0x4700000
+./ftdinandreader -w kernel/kernel-2000000.2200000-wOOB.bin -p 0x4500000 0x4700000
+
+--------------------------------------------- back to squash...
+../../ftdinandreader -r test -p 0x2200000 0x3400000 -t main
+cd ~/nandreader/ftdinandreader/rootfs/_rootfs.squash.extracted/_test.extracted
+
+mksquashfs squashfs-root a -noappend -comp gzip -b 65536
+then edit to change signature to --> shsq
+
+../../../createnfimg -j 0 -b 1 -i a
+../../../ftdinandreader -e -p 0x4700000 0x4C80000
+../../../ftdinandreader -w a.out -p 0x4700000 0x4C80000
+
+
+--------------------------------------------- try squash-lzma 3.0 from asus tools...--> NO kernel doesnt recog 3.0 squashfs
+~/nandreader/ftdinandreader/mksquashfs-lzma squashfs-root-minimal  a -noappend
+~/nandreader/ftdinandreader/createnfimg -j 0 -b 1 -i a
+a.out is 0x3B4C00
+~/nandreader/ftdinandreader/ftdinandreader -e -p 0x4700000 0x4AC0000
+~/nandreader/ftdinandreader/ftdinandreader -w a.out -p 0x4700000 0x4AC0000
+----------------------------------------------------------------------------- try to use first bank...OK, kernel boots
+~/nandreader/ftdinandreader/ftdinandreader -e -p 0x4500000 0x4700000 --> erase bank2 kernel to force boot from bank1
+~/nandreader/ftdinandreader/ftdinandreader -e -p 0x2200000 0x25C0000
+~/nandreader/ftdinandreader/ftdinandreader -w a.out -p 0x2200000 0x25C0000
+~/nandreader/ftdinandreader/mksquashfs-lzma -------> NO use 4.0 version
+
+mksquashfs squashfs-root-minimal a -noappend -comp gzip -b 65536
+then edit to change signature to --> shsq
+~/nandreader/ftdinandreader/createnfimg -j 0 -b 1 -i a
+
+~/nandreader/ftdinandreader/ftdinandreader -e -p 0x2200000 0x25C0000
+~/nandreader/ftdinandreader/ftdinandreader -w a.out -p 0x2200000 0x25C0000
+----> SQUASHFS error: squashfs_read_data failed to read block
+------------------------------------------------------------------------------------DO NOT COMPRESS INODES :-) yes!
+mksquashfs squashfs-root-minimal a -noappend -comp gzip -b 65536 -noI
+then edit to change signature to --> shsq
+~/nandreader/ftdinandreader/createnfimg -j 0 -b 1 -i a
+a.out is 54C180
+~/nandreader/ftdinandreader/ftdinandreader -e -p 0x2200000 0x2760000
+~/nandreader/ftdinandreader/ftdinandreader -w a.out -p 0x2200000 0x2760000
+-------------------------------------------------------------------------------------but...
+Warning: unable to open an initial console.
+
+go to squashfs-root-minimal/dev and create console and ttyS0
+.major		= TTY_MAJOR, .. should be 4 ..
+.minor		= 64,
+mknod console c 0 0 --> NO
+mknod ttyS0 c 4 64
+
+-------------------------------------------------------------------------------------but...
+Warning: unable to open an initial console.
+
+Please press En
+
+sudo mknod console c 5 1
+sudo mknod random c 1 8
+sudo mknod zero c 1 5
+
+/home/name/nandreader/ftdinandreader/mksquashfs squashfs-root-minimal a -noappend -comp gzip -b 65536 -noI
+then edit to change signature to --> shsq
+~/nandreader/ftdinandreader/createnfimg -j 0 -b 1 -i a
+a.out is 54C180
+/home/name/nandreader/ftdinandreader/ftdinandreader -e -p 0x2200000 0x2760000
+/home/name/nandreader/ftdinandreader/ftdinandreader -w a.out -p 0x2200000 0x2760000
+
+-------------------------------------------------------------------------------------but suddenly squash error!! what!!?
+kernel error!!
+./ftdinandreader -e -p 0x2000000 0x2200000
+./ftdinandreader -w kernel/kernel-2000000.2200000-wOOB.bin -p 0x2000000 0x2200000
+./ftdinandreader -e -p 0x4500000 0x4700000
+./ftdinandreader -w kernel/kernel-2000000.2200000-wOOB.bin -p 0x4500000 0x4700000
+
+try this
+./ftdinandreader -e -p 0x2000000 0x2200000
+./ftdinandreader -w CP1504SAL7M/CP1504SAL7M-bank1-withOOB.bin -p 0x2000000 0x2200000
+./ftdinandreader -r kernel-wOOB.bin -p 0x2000000 0x2200000
+
+
+--------------------------------------------- back to reload kernel? on second bank --> NO
+./ftdinandreader -e -p 0x4500000 0x4700000
+./ftdinandreader -w 0x2000000-0x2200000-wOOB.bin -p 0x4500000 0x4700000
+
+
+--------------------------------------------- squash -- after 4 tries kernel signal squash error and not loads
+/home/name/nandreader/ftdinandreader/mksquashfs squashfs-root-minimal a -noappend -comp gzip -b 65536 -noI
+~/nandreader/ftdinandreader/createnfimg -j 0 -b 1 -i a
+/home/name/nandreader/ftdinandreader/ftdinandreader -e -p 0x2220000 0x26C0000
+/home/name/nandreader/ftdinandreader/ftdinandreader -w a.out -p 0x2220000 0x26C0000
+
+--------------------------------------------- reload all
+./ftdinandreader -e -p 0x80000 0x8000000
+
+/home/name/nandreader/ftdinandreader/mksquashfs squashfs-root-minimal a -noappend -comp gzip -b 65536 -noI
+~/nandreader/ftdinandreader/createnfimg -j 0 -b 1 -i a
+/home/name/nandreader/ftdinandreader/ftdinandreader -e -p 0x2220000 0x2920000
+/home/name/nandreader/ftdinandreader/ftdinandreader -w a.out -p 0x2220000 0x2920000
+---------------NO
+/home/name/nandreader/ftdinandreader/mksquashfs squashfs-root a -noappend -comp gzip -b 65536 -noI
+~/nandreader/ftdinandreader/createnfimg -j 0 -b 1 -i a
+/home/name/nandreader/ftdinandreader/ftdinandreader -e -p 0x2220000 0x3100000
+/home/name/nandreader/ftdinandreader/ftdinandreader -w a.out -p 0x2220000 0x3100000
+
+/home/name/nandreader/ftdinandreader/mksquashfs squashfs-root-minimal a -noappend -comp gzip -b 65536 -noI
+~/nandreader/ftdinandreader/createnfimg -j 0 -b 1 -i a
+/home/name/nandreader/ftdinandreader/ftdinandreader -e -p 0x2220000 0x2A20000
+/home/name/nandreader/ftdinandreader/ftdinandreader -w a.out -p 0x2220000 0x2A20000
+
+
